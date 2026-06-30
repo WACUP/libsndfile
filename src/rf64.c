@@ -55,6 +55,7 @@
 #define OggS_MARKER		MAKE_MARKER ('O', 'g', 'g', 'S')
 #define wvpk_MARKER		MAKE_MARKER ('w', 'v', 'p', 'k')
 #define LIST_MARKER		MAKE_MARKER ('L', 'I', 'S', 'T')
+#define iXML_MARKER		MAKE_MARKER ('i', 'X', 'M', 'L')
 
 /*
 ** The file size limit in bytes below which we can, if requested, write this
@@ -257,12 +258,21 @@ rf64_read_header (SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 				break ;
 
 			case fmt_MARKER:
+				if (!(parsestage & HAVE_fmt)) {
+					// Only process the fmt chunk if it hasn't been handled yet
 					psf_log_printf (psf, "%M : %u\n", marker, chunk_size) ;
 					if ((error = wavlike_read_fmt_chunk (psf, chunk_size)) != 0)
 						return error ;
 					format = wav_fmt->format ;
 					parsestage |= HAVE_fmt ;
 					break ;
+				}
+				else {
+					// Duplicate fmt chunk detected
+					psf_log_printf(psf, "*** Multiple 'fmt ' chunks detected!", chunk_size);
+					// Return error code SFE_WAV_BAD_FMT
+					return SFE_WAV_BAD_FMT;
+				}
 
 			case bext_MARKER :
 					if ((error = wavlike_read_bext_chunk (psf, chunk_size)) != 0)
@@ -339,6 +349,7 @@ rf64_read_header (SF_PRIVATE *psf, int *blockalign, int *framesperblock)
 					} ;
 				break ;
 
+			case iXML_MARKER:
 			case JUNK_MARKER :
 			case PAD_MARKER :
 				psf_log_printf (psf, "%M : %d\n", marker, chunk_size) ;

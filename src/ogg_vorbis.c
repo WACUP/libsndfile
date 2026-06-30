@@ -323,6 +323,7 @@ vorbis_read_header (SF_PRIVATE *psf)
 	return 0 ;
 } /* vorbis_read_header */
 
+#if 0	// dro change
 static int
 vorbis_write_header (SF_PRIVATE *psf, int UNUSED (calc_length))
 {
@@ -413,6 +414,7 @@ vorbis_write_header (SF_PRIVATE *psf, int UNUSED (calc_length))
 
 	return 0 ;
 } /* vorbis_write_header */
+#endif
 
 static int
 vorbis_close (SF_PRIVATE *psf)
@@ -425,7 +427,7 @@ vorbis_close (SF_PRIVATE *psf)
 
 	/*	Clean up this logical bitstream ; before exit we should see if we're
 	**	followed by another [chained]. */
-
+#if 0	// dro change
 	if (psf->file.mode == SFM_WRITE)
 	{
 		if (psf->write_current <= 0)
@@ -437,7 +439,7 @@ vorbis_close (SF_PRIVATE *psf)
 			ret = vorbis_write_samples (psf, odata, vdata, 0) ;
 			} ;
 		} ;
-
+#endif
 	/* ogg_page and ogg_packet structs always point to storage in
 	   libvorbis.  They are never freed or manipulated directly */
 
@@ -479,6 +481,7 @@ ogg_vorbis_open (SF_PRIVATE *psf)
 		} ;
 
 	psf->codec_close = vorbis_close ;
+#if 0	// dro change
 	if (psf->file.mode == SFM_WRITE)
 	{
 		/* Set the default vorbis quality here. */
@@ -496,7 +499,7 @@ ogg_vorbis_open (SF_PRIVATE *psf)
 		psf->dataoffset = 0 ;
 		psf->strings.flags = SF_STR_ALLOW_START ;
 		} ;
-
+#endif
 	psf->seek = vorbis_seek ;
 	psf->command = vorbis_command ;
 	psf->byterate = vorbis_byterate ;

@@ -77,6 +77,8 @@
 
 #include "ogg.h"
 
+#include <delayimp.h>
+
 #define OGG_SYNC_READ_SIZE (2048)
 #define OGG_PAGE_SIZE_MAX (65307)
 #define OGG_CHUNK_SIZE (65536)
@@ -727,6 +729,17 @@ ogg_open (SF_PRIVATE *psf)
 
 	if (psf->file.mode == SFM_RDWR)
 		return SFE_BAD_MODE_RW ;
+
+	// dro change - give things a nudge as it is
+	// possible to get crashes due to this being
+	// called on multiple threads so we avoid it
+	static int checked_oggs;
+	if (!checked_oggs)
+	{
+		checked_oggs = (SUCCEEDED(__HrLoadAllImportsForDll("libflac.dll")) &&
+						SUCCEEDED(__HrLoadAllImportsForDll("libopus.dll")) &&
+						SUCCEEDED(__HrLoadAllImportsForDll("libvorbis.dll")));
+	}
 
 	if (psf->file.mode == SFM_READ)
 		if ((error = ogg_stream_classify (psf, odata)) != 0)

@@ -23,7 +23,7 @@ typedef struct
 	/* The equivalent array of SF_CHANNEL_MAP_* entries. */
 	const int * channel_map ;
 
-	const char * name ;
+	//const char * name ;
 } AIFF_CAF_CHANNEL_MAP ;
 
 

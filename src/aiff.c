@@ -1781,11 +1781,11 @@ aiff_read_chanmap (SF_PRIVATE * psf, unsigned dword)
 
 	if ((map_info = aiff_caf_of_channel_layout_tag (layout_tag)) == NULL)
 		return 0 ;
-
+#if VERBOSE_DEBUG
 	psf_log_printf (psf, "  Tag    : %x\n", layout_tag) ;
 	if (map_info)
 		psf_log_printf (psf, "  Layout : %s\n", map_info->name) ;
-
+#endif
 	if (bytesread < dword)
 		psf_binheader_readf (psf, "j", dword - bytesread) ;
 

@@ -209,7 +209,8 @@ alac_close	(SF_PRIVATE *psf)
 			while ((readcount = fread (ubuf.ucbuf, 1, sizeof (ubuf.ucbuf), plac->enctmp)) > 0)
 				psf_fwrite (ubuf.ucbuf, 1, readcount, psf) ;
 			fclose (plac->enctmp) ;
-			remove (plac->enctmpname) ;
+			// dro change
+			DeleteFile/*/remove/**/ (plac->enctmpname) ;
 			} ;
 		} ;
 
@@ -974,7 +975,10 @@ alac_kuki_read (SF_PRIVATE * psf, uint32_t kuki_offset, uint8_t * kuki, size_t k
 
 static const char *
 alac_error_string (int error)
-{	static char errstr [128] ;
+{
+// dro change to avoid this as it's not used
+#ifdef _DEBUG
+	static char errstr [128] ;
 	switch (error)
 	{	CASE_NAME (kALAC_UnimplementedError) ;
 		CASE_NAME (kALAC_FileNotFoundError) ;
@@ -995,5 +999,8 @@ alac_error_string (int error)
 
 	snprintf (errstr, sizeof (errstr), "Unknown error %d", error) ;
 	return errstr ;
+#else
+	return NULL ;
+#endif
 } /* alac_error_string */
 

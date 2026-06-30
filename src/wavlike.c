@@ -143,7 +143,7 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
 					&(wav_fmt->min.samplerate), &(wav_fmt->min.bytespersec),
 					&(wav_fmt->min.blockalign), &(wav_fmt->min.bitwidth)) ;
 
-	psf_log_printf (psf, "  Format        : 0x%X => %s\n", wav_fmt->format, wavlike_format_str (wav_fmt->format)) ;
+	//psf_log_printf (psf, "  Format        : 0x%X => %s\n", wav_fmt->format, wavlike_format_str (wav_fmt->format)) ;
 	psf_log_printf (psf, "  Channels      : %d\n", wav_fmt->min.channels) ;
 	psf_log_printf (psf, "  Sample Rate   : %d\n", wav_fmt->min.samplerate) ;
 
@@ -579,7 +579,7 @@ wavlike_analyze (SF_PRIVATE *psf)
 
 /*==============================================================================
 */
-
+#if VERBOSE_DEBUG
 typedef struct
 {	int			ID ;
 	const char	*name ;
@@ -721,7 +721,7 @@ wavlike_format_str (int k)
 
 	return "Unknown format" ;
 } /* wavlike_format_str */
-
+#endif
 int
 wavlike_srate2blocksize (int srate_chan_product)
 {	if (srate_chan_product < 12000)

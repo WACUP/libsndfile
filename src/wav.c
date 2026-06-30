@@ -31,6 +31,8 @@
 #include	"common.h"
 #include	"wavlike.h"
 
+#include <delayimp.h>
+
 /*------------------------------------------------------------------------------
  * Macros to handle big/little endian issues.
  */
@@ -286,6 +288,15 @@ wav_open	(SF_PRIVATE *psf)
 					break ;
 
 		case SF_FORMAT_MPEG_LAYER_III :
+					// dro change - give things a nudge as it is
+					// possible to get crashes due to this being
+					// called on multiple threads so we avoid it
+					static int checked_mpg123;
+					if (!checked_mpg123)
+					{
+						checked_mpg123 = SUCCEEDED(__HrLoadAllImportsForDll("mpg123.dll"));
+					}
+
 					error = mpeg_init (psf, SF_BITRATE_MODE_CONSTANT, SF_FALSE) ;
 					break ;
 

@@ -105,6 +105,9 @@
 #define HAVE_UNISTD_H 0
 #endif
 
+// NOTE: This must be present otherwise at least 32-bit float wav will not work!!!
+#include "float_cast.h"
+
 #ifndef HAVE_PIPE
 #define HAVE_PIPE 0
 #endif
@@ -130,6 +133,14 @@
 
 #if (defined (__SSE2__) || defined (_M_AMD64) || (defined (_M_IX86_FP) && (_M_IX86_FP >= 2)) && HAVE_IMMINTRIN_H)
 #define USE_SSE2
+#endif
+
+#ifndef HAVE_SSIZE_T
+#define HAVE_SSIZE_T 0
+#endif
+
+#if (HAVE_SSIZE_T == 0)
+#define ssize_t intptr_t
 #endif
 
 #endif

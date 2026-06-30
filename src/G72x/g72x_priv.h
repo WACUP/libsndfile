@@ -109,11 +109,14 @@ void private_init_state (G72x_STATE *state_ptr) ;
 #if __GNUC__
 #define ALWAYS_INLINE		__attribute__ ((always_inline))
 #elif defined _MSC_VER
+#ifndef ALWAYS_INLINE
 #define ALWAYS_INLINE		__forceinline
+#endif
 #else
 #define ALWAYS_INLINE
 #endif
 
+#if 0
 static inline int ALWAYS_INLINE
 arith_shift_left (int x, int shift)
 {	return (int) (((unsigned int) x) << shift) ;
@@ -125,5 +128,6 @@ arith_shift_right (int x, int shift)
 		return x << shift ;
 	return ~ ((~x) << shift) ;
 } /* arith_shift_right */
+#endif
 
 #endif /* G72X_PRIVATE_H */

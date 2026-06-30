@@ -35,6 +35,7 @@
 #include "sndfile.h"
 #include "sfendian.h"
 #include "common.h"
+#include <io.h>	// dro change for _access()
 
 #define	INITIAL_HEADER_SIZE	256
 
@@ -101,6 +102,7 @@ log_putchar (SF_PRIVATE *psf, char ch)
 	return ;
 } /* log_putchar */
 
+#if VERBOSE_DEBUG
 void
 psf_log_printf (SF_PRIVATE *psf, const char *format, ...)
 {	va_list		ap ;
@@ -391,6 +393,7 @@ psf_log_printf (SF_PRIVATE *psf, const char *format, ...)
 	va_end (ap) ;
 	return ;
 } /* psf_log_printf */
+#endif
 
 /*-----------------------------------------------------------------------------------------------
 **  ASCII header printf functions.
@@ -402,7 +405,9 @@ psf_log_printf (SF_PRIVATE *psf, const char *format, ...)
 
 void
 psf_asciiheader_printf (SF_PRIVATE *psf, const char *format, ...)
-{	va_list	argptr ;
+{
+#if VERBOSE_DEBUG
+	va_list	argptr ;
 	int		maxlen ;
 	char	*start ;
 
@@ -423,6 +428,7 @@ psf_asciiheader_printf (SF_PRIVATE *psf, const char *format, ...)
 	psf->header.indx = strlen ((char*) psf->header.ptr) ;
 
 	return ;
+#endif
 } /* psf_asciiheader_printf */
 
 /*-----------------------------------------------------------------------------------------------
@@ -1246,7 +1252,9 @@ psf_hexdump (const void *ptr, int len)
 
 void
 psf_log_SF_INFO (SF_PRIVATE *psf)
-{	psf_log_printf (psf, "---------------------------------\n") ;
+{
+#if VERBOSE_DEBUG
+	psf_log_printf (psf, "---------------------------------\n") ;
 
 	psf_log_printf (psf, " Sample rate :   %d\n", psf->sf.samplerate) ;
 	if (psf->sf.frames == SF_COUNT_MAX)
@@ -1260,6 +1268,7 @@ psf_log_SF_INFO (SF_PRIVATE *psf)
 	psf_log_printf (psf, " Seekable    :   %s\n", psf->sf.seekable ? "TRUE" : "FALSE") ;
 
 	psf_log_printf (psf, "---------------------------------\n") ;
+#endif
 } /* psf_dump_SFINFO */
 
 /*========================================================================================
@@ -1824,18 +1833,26 @@ psf_d2i_clip_array (const double *src, int *dest, int count, int normalize)
 
 FILE *
 psf_open_tmpfile (char * fname, size_t fnamelen)
-{	const char * tmpdir ;
+{
+#if 0	// dro change
+	const char * tmpdir ;
+#endif
 	FILE * file ;
-
+#if 0	// dro change
 	if (OS_IS_WIN32)
 		tmpdir = getenv ("TEMP") ;
 	else
 	{	tmpdir = getenv ("TMPDIR") ;
 		tmpdir = tmpdir == NULL ? "/tmp" : tmpdir ;
 		} ;
+#endif
+	// dro change to avoid a less than ideal solution
+	char tmpdir[MAX_PATH] = { 0 };
+	GetTempPathA(ARRAYSIZE(tmpdir) - 14, tmpdir);	// MSDN says so
 
-	if (tmpdir && access (tmpdir, R_OK | W_OK | X_OK) == 0)
-	{	snprintf (fname, fnamelen, "%s/%x%x-alac.tmp", tmpdir, psf_rand_int32 (), psf_rand_int32 ()) ;
+	if (tmpdir[0] && _access (tmpdir, R_OK | W_OK | X_OK) == 0)
+	{	snprintf (fname, fnamelen, "%s/%x%x-alac.tmp", tmpdir,
+				  psf_rand_int32 (), psf_rand_int32 ()) ;
 		if ((file = fopen (fname, "wb+")) != NULL)
 			return file ;
 		} ;

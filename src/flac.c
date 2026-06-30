@@ -107,15 +107,19 @@ static sf_count_t	flac_write_d2flac (SF_PRIVATE *psf, const double *ptr, sf_coun
 static void		f2flac8_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		f2flac16_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		f2flac24_array (const float *src, int32_t *dest, int count, int normalize) ;
+static void		f2flac32_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		f2flac8_clip_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		f2flac16_clip_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		f2flac24_clip_array (const float *src, int32_t *dest, int count, int normalize) ;
+static void		f2flac32_clip_array (const float *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac8_array (const double *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac16_array (const double *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac24_array (const double *src, int32_t *dest, int count, int normalize) ;
+static void		d2flac32_array (const double *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac8_clip_array (const double *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac16_clip_array (const double *src, int32_t *dest, int count, int normalize) ;
 static void		d2flac24_clip_array (const double *src, int32_t *dest, int count, int normalize) ;
+static void		d2flac32_clip_array (const double *src, int32_t *dest, int count, int normalize) ;
 
 static int flac_command (SF_PRIVATE *psf, int command, void *data, int datasize) ;
 
@@ -153,6 +157,12 @@ s2flac24_array (const short *src, int32_t *dest, int count)
 } /* s2flac24_array */
 
 static void
+s2flac32_array (const short *src, int32_t *dest, int count)
+{	for (int i = 0 ; i < count ; i++)
+		dest [i] = src [i] << 16 ;
+} /* s2flac32_array */
+
+static void
 i2flac8_array (const int *src, int32_t *dest, int count)
 {	for (int i = 0 ; i < count ; i++)
 		dest [i] = src [i] >> 24 ;
@@ -170,6 +180,12 @@ i2flac24_array (const int *src, int32_t *dest, int count)
 {	for (int i = 0 ; i < count ; i++)
 		dest [i] = src [i] >> 8 ;
 } /* i2flac24_array */
+
+static void
+i2flac32_array (const int *src, int32_t *dest, int count)
+{	for (int i = 0 ; i < count ; i++)
+		dest [i] = src [i] ;
+} /* i2flac32_array */
 
 static sf_count_t
 flac_buffer_copy (SF_PRIVATE *psf)
@@ -289,7 +305,7 @@ flac_buffer_copy (SF_PRIVATE *psf)
 
 		case PFLAC_PCM_FLOAT :
 			{	float *retpcm = (float*) pflac->ptr ;
-				float norm = (psf->norm_float == SF_TRUE) ? 1.0 / (1 << (frame->header.bits_per_sample - 1)) : 1.0 ;
+				float norm = (psf->norm_float == SF_TRUE) ? 1.0 / ((int64_t) 1 << (frame->header.bits_per_sample - 1)) : 1.0 ;
 
 				for (i = 0 ; i < len && pflac->remain > 0 ; i++)
 				{	offset = pflac->pos + i * channels ;
@@ -301,7 +317,22 @@ flac_buffer_copy (SF_PRIVATE *psf)
 						break ;
 
 					for (j = 0 ; j < channels ; j++)
-						retpcm [offset + j] = buffer [j][pflac->bufferpos] * norm ;
+					{
+						// dro change - this seems to help resolve an
+						//				issue with some 24-bit flac &
+						//				clamps the value being looked
+						//				so it no longer generates bad
+						//				output due to mismatched data
+						if (frame->header.bits_per_sample == 24)
+						{
+							const int32_t i = buffer[j][pflac->bufferpos];
+							retpcm[offset + j] = (((int8_t)(i >> 16) << 16) + (uint16_t)(i & 0xFFFF)) * norm;
+						}
+						else
+						{
+							retpcm[offset + j] = buffer[j][pflac->bufferpos] * norm;
+						}
+					}
 					pflac->remain -= channels ;
 					pflac->bufferpos++ ;
 					} ;
@@ -310,7 +341,7 @@ flac_buffer_copy (SF_PRIVATE *psf)
 
 		case PFLAC_PCM_DOUBLE :
 			{	double *retpcm = (double*) pflac->ptr ;
-				double norm = (psf->norm_double == SF_TRUE) ? 1.0 / (1 << (frame->header.bits_per_sample - 1)) : 1.0 ;
+				double norm = (psf->norm_double == SF_TRUE) ? 1.0 / ((int64_t) 1 << (frame->header.bits_per_sample - 1)) : 1.0 ;
 
 				for (i = 0 ; i < len && pflac->remain > 0 ; i++)
 				{	offset = pflac->pos + i * channels ;
@@ -489,6 +520,10 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
 					psf->sf.format |= SF_FORMAT_PCM_24 ;
 					bitwidth = 24 ;
 					break ;
+				case 32 :
+					psf->sf.format |= SF_FORMAT_PCM_32 ;
+					bitwidth = 32 ;
+					break ;
 				default :
 					psf_log_printf (psf, "sf_flac_meta_callback : bits_per_sample %d not yet implemented.\n", metadata->data.stream_info.bits_per_sample) ;
 					break ;
@@ -538,8 +573,8 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
 static void
 sf_flac_error_callback (const FLAC__StreamDecoder * UNUSED (decoder), FLAC__StreamDecoderErrorStatus status, void *client_data)
 {	SF_PRIVATE *psf = (SF_PRIVATE*) client_data ;
-
-	psf_log_printf (psf, "ERROR : %s\n", FLAC__StreamDecoderErrorStatusString [status]) ;
+	// dro change
+	//psf_log_printf (psf, "ERROR : %s\n", FLAC__StreamDecoderErrorStatusString [status]) ;
 
 	switch (status)
 	{	case FLAC__STREAM_DECODER_ERROR_STATUS_LOST_SYNC :
@@ -672,7 +707,9 @@ flac_write_header (SF_PRIVATE *psf, int UNUSED (calc_length))
 	flac_write_strings (psf, pflac) ;
 
 	if ((err = FLAC__stream_encoder_init_stream (pflac->fse, sf_flac_enc_write_callback, sf_flac_enc_seek_callback, sf_flac_enc_tell_callback, NULL, psf)) != FLAC__STREAM_DECODER_INIT_STATUS_OK)
-	{	psf_log_printf (psf, "Error : FLAC encoder init returned error : %s\n", FLAC__StreamEncoderInitStatusString [err]) ;
+	{
+		// dro change
+		//psf_log_printf (psf, "Error : FLAC encoder init returned error : %s\n", FLAC__StreamEncoderInitStatusString [err]) ;
 		return SFE_FLAC_INIT_DECODER ;
 		} ;
 
@@ -710,7 +747,7 @@ flac_open	(SF_PRIVATE *psf)
 		} ;
 
 	subformat = SF_CODEC (psf->sf.format) ;
-
+#if 0 // dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	if ((SF_CONTAINER (psf->sf.format)) != SF_FORMAT_FLAC)
 			return	SFE_BAD_OPEN_FORMAT ;
@@ -729,7 +766,7 @@ flac_open	(SF_PRIVATE *psf)
 
 		psf->write_header = flac_write_header ;
 		} ;
-
+#endif
 	psf->datalength = psf->filelength ;
 	psf->dataoffset = 0 ;
 
@@ -743,6 +780,7 @@ flac_open	(SF_PRIVATE *psf)
 	{	case SF_FORMAT_PCM_S8 :	/* 8-bit FLAC.  */
 		case SF_FORMAT_PCM_16 :	/* 16-bit FLAC. */
 		case SF_FORMAT_PCM_24 :	/* 24-bit FLAC. */
+		case SF_FORMAT_PCM_32 :	/* 32-bit FLAC. */
 			error = flac_init (psf) ;
 			break ;
 
@@ -765,13 +803,13 @@ flac_close	(SF_PRIVATE *psf)
 
 	if (pflac->metadata != NULL)
 		FLAC__metadata_object_delete (pflac->metadata) ;
-
+#if 0 // dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	FLAC__stream_encoder_finish (pflac->fse) ;
 		FLAC__stream_encoder_delete (pflac->fse) ;
 		free (pflac->encbuffer) ;
 		} ;
-
+#endif
 	if (psf->file.mode == SFM_READ)
 	{	FLAC__stream_decoder_finish (pflac->fsd) ;
 		FLAC__stream_decoder_delete (pflac->fsd) ;
@@ -813,7 +851,9 @@ flac_enc_init (SF_PRIVATE *psf)
 		case SF_FORMAT_PCM_24 :
 			bps = 24 ;
 			break ;
-
+		case SF_FORMAT_PCM_32 :
+			bps = 32 ;
+			break ;
 		default :
 			bps = 0 ;
 			break ;
@@ -924,14 +964,14 @@ flac_init (SF_PRIVATE *psf)
 		psf->read_float		= flac_read_flac2f ;
 		psf->read_double	= flac_read_flac2d ;
 		} ;
-
+#if 0 // dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	psf->write_short	= flac_write_s2flac ;
 		psf->write_int		= flac_write_i2flac ;
 		psf->write_float	= flac_write_f2flac ;
 		psf->write_double	= flac_write_d2flac ;
 		} ;
-
+#endif
 	if (psf->filelength > psf->dataoffset)
 		psf->datalength = (psf->dataend) ? psf->dataend - psf->dataoffset : psf->filelength - psf->dataoffset ;
 	else
@@ -951,7 +991,9 @@ flac_read_loop (SF_PRIVATE *psf, unsigned len)
 
 	state = FLAC__stream_decoder_get_state (pflac->fsd) ;
 	if (state > FLAC__STREAM_DECODER_END_OF_STREAM)
-	{	psf_log_printf (psf, "FLAC__stream_decoder_get_state returned %s\n", FLAC__StreamDecoderStateString [state]) ;
+	{
+		// dro change
+		//psf_log_printf (psf, "FLAC__stream_decoder_get_state returned %s\n", FLAC__StreamDecoderStateString [state]) ;
 		/* Current frame is busted, so NULL the pointer. */
 		pflac->frame = NULL ;
 		} ;
@@ -963,14 +1005,16 @@ flac_read_loop (SF_PRIVATE *psf, unsigned len)
 	/* Decode some more. */
 	while (pflac->pos < pflac->len)
 	{	if (FLAC__stream_decoder_process_single (pflac->fsd) == 0)
-		{	psf_log_printf (psf, "FLAC__stream_decoder_process_single returned false\n") ;
+		{	//psf_log_printf (psf, "FLAC__stream_decoder_process_single returned false\n") ;
 			/* Current frame is busted, so NULL the pointer. */
 			pflac->frame = NULL ;
 			break ;
 			} ;
 		state = FLAC__stream_decoder_get_state (pflac->fsd) ;
 		if (state >= FLAC__STREAM_DECODER_END_OF_STREAM)
-		{	psf_log_printf (psf, "FLAC__stream_decoder_get_state returned %s\n", FLAC__StreamDecoderStateString [state]) ;
+		{
+			// dro change
+			//psf_log_printf (psf, "FLAC__stream_decoder_get_state returned %s\n", FLAC__StreamDecoderStateString [state]) ;
 			/* Current frame is busted, so NULL the pointer. */
 			pflac->frame = NULL ;
 			break ;
@@ -1081,6 +1125,9 @@ flac_write_s2flac (SF_PRIVATE *psf, const short *ptr, sf_count_t len)
 		case SF_FORMAT_PCM_24 :
 			convert = s2flac24_array ;
 			break ;
+		case SF_FORMAT_PCM_32 :
+			convert = s2flac32_array ;
+			break ;
 		default :
 			return -1 ;
 		} ;
@@ -1123,6 +1170,9 @@ flac_write_i2flac (SF_PRIVATE *psf, const int *ptr, sf_count_t len)
 		case SF_FORMAT_PCM_24 :
 			convert = i2flac24_array ;
 			break ;
+		case SF_FORMAT_PCM_32 :
+			convert = i2flac32_array ;
+			break ;
 		default :
 			return -1 ;
 		} ;
@@ -1164,6 +1214,9 @@ flac_write_f2flac (SF_PRIVATE *psf, const float *ptr, sf_count_t len)
 			break ;
 		case SF_FORMAT_PCM_24 :
 			convert = (psf->add_clipping) ? f2flac24_clip_array : f2flac24_array ;
+			break ;
+		case SF_FORMAT_PCM_32 :
+			convert = (psf->add_clipping) ? f2flac32_clip_array : f2flac32_array ;
 			break ;
 		default :
 			return -1 ;
@@ -1255,6 +1308,29 @@ f2flac24_clip_array (const float *src, int32_t *dest, int count, int normalize)
 } /* f2flac24_clip_array */
 
 static void
+f2flac32_clip_array (const float *src, int32_t *dest, int count, int normalize)
+{	float normfact, scaled_value ;
+
+	normfact = normalize ? (8.0 * 0x10000000) : 1.0 ;
+
+	for (int i = 0 ; i < count ; i++)
+	{	scaled_value = src [i] * normfact ;
+		if (scaled_value >= (1.0 * 0x7FFFFFFF))
+		{	dest [i] = 0x7FFFFFFF ;
+			continue ;
+			} ;
+
+		if (scaled_value <= (-8.0 * 0x10000000))
+		{	dest [i] = ~INT32_C(0x7FFFFFFF) ;
+			continue ;
+			}
+		dest [i] = psf_lrintf (scaled_value) ;
+		} ;
+
+	return ;
+} /* f2flac32_clip_array */
+
+static void
 f2flac8_array (const float *src, int32_t *dest, int count, int normalize)
 {	float normfact = normalize ? (1.0 * 0x7F) : 1.0 ;
 
@@ -1278,6 +1354,14 @@ f2flac24_array (const float *src, int32_t *dest, int count, int normalize)
 		dest [i] = psf_lrintf (src [i] * normfact) ;
 } /* f2flac24_array */
 
+static void
+f2flac32_array (const float *src, int32_t *dest, int count, int normalize)
+{	float normfact = normalize ? (1.0 * 0x7FFFFFFF) : 1.0 ;
+
+	for (int i = 0 ; i < count ; i++)
+		dest [i] = psf_lrintf (src [i] * normfact) ;
+} /* f2flac32_array */
+
 static sf_count_t
 flac_write_d2flac (SF_PRIVATE *psf, const double *ptr, sf_count_t len)
 {	FLAC_PRIVATE* pflac = (FLAC_PRIVATE*) psf->codec_data ;
@@ -1295,6 +1379,9 @@ flac_write_d2flac (SF_PRIVATE *psf, const double *ptr, sf_count_t len)
 			break ;
 		case SF_FORMAT_PCM_24 :
 			convert = (psf->add_clipping) ? d2flac24_clip_array : d2flac24_array ;
+			break ;
+		case SF_FORMAT_PCM_32 :
+			convert = (psf->add_clipping) ? d2flac32_clip_array : d2flac32_array ;
 			break ;
 		default :
 			return -1 ;
@@ -1387,6 +1474,28 @@ d2flac24_clip_array (const double *src, int32_t *dest, int count, int normalize)
 } /* d2flac24_clip_array */
 
 static void
+d2flac32_clip_array (const double *src, int32_t *dest, int count, int normalize)
+{	double normfact, scaled_value ;
+
+	normfact = normalize ? (8.0 * 0x10000000) : 1.0 ;
+
+	for (int i = 0 ; i < count ; i++)
+	{	scaled_value = src [i] * normfact ;
+		if (scaled_value >= (1.0 * 0x7FFFFFFF))
+		{	dest [i] = 0x7FFFFFFF ;
+			continue ;
+			} ;
+		if (scaled_value <= (-8.0 * 0x10000000))
+		{	dest [i] = ~INT32_C(0x7FFFFFFF) ;
+			continue ;
+			} ;
+		dest [i] = psf_lrint (scaled_value) ;
+		} ;
+
+	return ;
+} /* d2flac32_clip_array */
+
+static void
 d2flac8_array (const double *src, int32_t *dest, int count, int normalize)
 {	double normfact = normalize ? (1.0 * 0x7F) : 1.0 ;
 
@@ -1410,9 +1519,18 @@ d2flac24_array (const double *src, int32_t *dest, int count, int normalize)
 		dest [i] = psf_lrint (src [i] * normfact) ;
 } /* d2flac24_array */
 
+static void
+d2flac32_array (const double *src, int32_t *dest, int count, int normalize)
+{	double normfact = normalize ? (1.0 * 0x7FFFFFFF) : 1.0 ;
+
+	for (int i = 0 ; i < count ; i++)
+		dest [i] = psf_lrint (src [i] * normfact) ;
+} /* d2flac32_array */
+
 static sf_count_t
 flac_seek (SF_PRIVATE *psf, int UNUSED (mode), sf_count_t offset)
 {	FLAC_PRIVATE* pflac = (FLAC_PRIVATE*) psf->codec_data ;
+	FLAC__StreamDecoderState state ;
 
 	if (pflac == NULL)
 		return 0 ;
@@ -1435,6 +1553,17 @@ flac_seek (SF_PRIVATE *psf, int UNUSED (mode), sf_count_t offset)
 			** instead of returning an error, we can return the offset.
 			*/
 			return offset ;
+			} ;
+
+		state = FLAC__stream_decoder_get_state (pflac->fsd) ;
+		if (state == FLAC__STREAM_DECODER_SEEK_ERROR)
+		{
+			if (!FLAC__stream_decoder_flush (pflac->fsd))
+			{	//psf_log_printf (psf, "FLAC__stream_decoder_flush after FLAC__STREAM_DECODER_SEEK_ERROR returned false\n") ;
+				} ;
+			}
+		else
+		{	//psf_log_printf (psf, "FLAC__stream_decoder_get_state after failed FLAC__stream_decoder_seek_absolute returned %s\n", FLAC__StreamDecoderStateString [state]) ;
 			} ;
 
 		psf->error = SFE_BAD_SEEK ;

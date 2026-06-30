@@ -37,7 +37,9 @@
 #if USE_WINDOWS_API
 
 /* Don't include rarely used headers, speed up build */
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 
 #include <windows.h>
 #endif
@@ -129,6 +131,17 @@ psf_fopen (SF_PRIVATE *psf)
 	if (psf->file.filedes == -1)
 		psf_log_syserr (psf, errno) ;
 
+	// dro change to try to use a buffer so things
+	// can potentially be read in quicker on large
+	// files instead of doing so much by bytes,etc
+	else
+	{
+		FILE* fp = fdopen(psf->file.filedes, "w");
+		if (fp != NULL)
+		{
+			setvbuf(fp, NULL, _IOFBF, INT_MAX);
+		}
+	}
 	return psf->error ;
 } /* psf_fopen */
 
@@ -332,7 +345,7 @@ psf_fseek (SF_PRIVATE *psf, sf_count_t offset, int whence)
 				return 0 ;
 		} ;
 
-	absolute_position = lseek (psf->file.filedes, offset, whence) ;
+	absolute_position = _lseek (psf->file.filedes, offset, whence) ;
 
 	if (absolute_position < 0)
 		psf_log_syserr (psf, errno) ;
@@ -358,7 +371,7 @@ psf_fread (void *ptr, sf_count_t bytes, sf_count_t items, SF_PRIVATE *psf)
 	{	/* Break the read down to a sensible size. */
 		count = (items > SENSIBLE_SIZE) ? SENSIBLE_SIZE : (ssize_t) items ;
 
-		count = read (psf->file.filedes, ((char*) ptr) + total, (size_t) count) ;
+		count = _read (psf->file.filedes, ((char*) ptr) + total, (size_t) count) ;
 
 		if (count == -1)
 		{	if (errno == EINTR)
@@ -402,7 +415,7 @@ psf_fwrite (const void *ptr, sf_count_t bytes, sf_count_t items, SF_PRIVATE *psf
 	{	/* Break the writes down to a sensible size. */
 		count = (items > SENSIBLE_SIZE) ? SENSIBLE_SIZE : items ;
 
-		count = write (psf->file.filedes, ((const char*) ptr) + total, count) ;
+		count = _write (psf->file.filedes, ((const char*) ptr) + total, count) ;
 
 		if (count == -1)
 		{	if (errno == EINTR)
@@ -435,7 +448,7 @@ psf_ftell (SF_PRIVATE *psf)
 	if (psf->is_pipe)
 		return psf->pipeoffset ;
 
-	pos = lseek (psf->file.filedes, 0, SEEK_CUR) ;
+	pos = _lseek (psf->file.filedes, 0, SEEK_CUR) ;
 
 	if (pos == ((sf_count_t) -1))
 	{	psf_log_syserr (psf, errno) ;
@@ -452,7 +465,7 @@ psf_close_fd (int fd)
 	if (fd < 0)
 		return 0 ;
 
-	while ((retval = close (fd)) == -1 && errno == EINTR)
+	while ((retval = _close (fd)) == -1 && errno == EINTR)
 		/* Do nothing. */ ;
 
 	return retval ;
@@ -464,7 +477,7 @@ psf_fgets (char *buffer, sf_count_t bufsize, SF_PRIVATE *psf)
 	sf_count_t		count ;
 
 	while (k < bufsize - 1)
-	{	count = read (psf->file.filedes, &(buffer [k]), 1) ;
+	{	count = _read (psf->file.filedes, &(buffer [k]), 1) ;
 
 		if (count == -1)
 		{	if (errno == EINTR)
@@ -496,7 +509,7 @@ psf_is_pipe (SF_PRIVATE *psf)
 		return SF_TRUE ;
 		} ;
 
-	if (S_ISFIFO (statbuf.st_mode) || S_ISSOCK (statbuf.st_mode))
+	if (S_ISFIFO (statbuf.st_mode)/* || S_ISSOCK (statbuf.st_mode)*/)	// dro change
 		return SF_TRUE ;
 
 	return SF_FALSE ;
@@ -533,6 +546,9 @@ psf_ftruncate (SF_PRIVATE *psf, sf_count_t len)
 	if ((sizeof (off_t) < sizeof (sf_count_t)) && len > 0x7FFFFFFF)
 		return -1 ;
 
+#ifdef _WIN32	// dro change
+	#define ftruncate _chsize_s
+#endif
 	retval = ftruncate (psf->file.filedes, len) ;
 
 	if (retval == -1)
@@ -566,6 +582,7 @@ psf_use_rsrc (SF_PRIVATE *psf, int on_off)
 static int
 psf_open_fd (PSF_FILE * pfile)
 {	int fd, oflag, mode ;
+	LPWSTR pwszPath = NULL; // dro change
 
 	/*
 	** Sanity check. If everything is OK, this test and the printfs will
@@ -599,11 +616,31 @@ psf_open_fd (PSF_FILE * pfile)
 				break ;
 		} ;
 
+#if 1
+	// dro change
+	int nResult = MultiByteToWideChar (CP_UTF8, 0, pfile->path, -1, NULL, 0) ;
+	pwszPath = malloc (nResult * sizeof (WCHAR)) ;
+	if (!pwszPath)
+		return -1 ;
+	
+	int nResult2 = MultiByteToWideChar (CP_UTF8, 0, pfile->path, -1, pwszPath, nResult) ;
+	if (nResult != nResult2)
+	{	free (pwszPath) ;
+		return -1 ;
+		} ;
+
+	if (mode == 0)
+		fd = _wopen(pwszPath, oflag);
+	else
+		fd = _wopen(pwszPath, oflag, mode);
+
+	free(pwszPath);
+#else
 	if (mode == 0)
 		fd = open (pfile->path, oflag) ;
 	else
 		fd = open (pfile->path, oflag, mode) ;
-
+#endif
 	return fd ;
 } /* psf_open_fd */
 
@@ -839,7 +876,8 @@ psf_open_handle (PSF_FILE * pfile)
 				dwShareMode,				/* share mode */
 				0,							/* pointer to security attributes */
 				dwCreationDistribution,		/* how to create */
-				FILE_ATTRIBUTE_NORMAL,		/* file attributes (could use FILE_FLAG_SEQUENTIAL_SCAN) */
+				FILE_ATTRIBUTE_NORMAL |		/* file attributes (could use FILE_FLAG_SEQUENTIAL_SCAN) */
+				FILE_FLAG_SEQUENTIAL_SCAN,	/* dro change to give it a better hint with processing it */
 				NULL						/* handle to file with attributes to copy */
 				) ;
 #endif
@@ -850,7 +888,9 @@ psf_open_handle (PSF_FILE * pfile)
 
 /* USE_WINDOWS_API */ static void
 psf_log_syserr (SF_PRIVATE *psf, int error)
-{	LPVOID lpMsgBuf ;
+{
+#if VERBOSE_DEBUG
+	LPVOID lpMsgBuf ;
 
 	/* Only log an error if no error has been set yet. */
 	if (psf->error == 0)
@@ -871,6 +911,11 @@ psf_log_syserr (SF_PRIVATE *psf, int error)
 		} ;
 
 	return ;
+#else
+	if (psf->error == 0)
+	{	psf->error = SFE_SYSTEM ;
+	}
+#endif
 } /* psf_log_syserr */
 
 

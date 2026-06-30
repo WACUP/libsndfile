@@ -44,7 +44,9 @@ mpeg_write_header (SF_PRIVATE *psf, int UNUSED (calc_length))
 
 static int
 mpeg_command (SF_PRIVATE *psf, int command, void *data, int datasize)
-{	int bitrate_mode ;
+{
+#if 0	// dro change
+	int bitrate_mode ;
 
 	switch (command)
 	{	case SFC_SET_COMPRESSION_LEVEL :
@@ -79,7 +81,7 @@ mpeg_command (SF_PRIVATE *psf, int command, void *data, int datasize)
 		default :
 			return SF_FALSE ;
 		} ;
-
+#endif
 	return SF_FALSE ;
 } /* mpeg_command */
 
@@ -93,7 +95,7 @@ mpeg_init (SF_PRIVATE *psf, int bitrate_mode, int write_metadata)
 
 	if (psf->file.mode == SFM_RDWR)
 		return SFE_BAD_MODE_RW ;
-
+#if 0	// dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	switch (SF_CODEC (psf->sf.format))
 		{	case SF_FORMAT_MPEG_LAYER_III :
@@ -117,7 +119,7 @@ mpeg_init (SF_PRIVATE *psf, int bitrate_mode, int write_metadata)
 				return SFE_INTERNAL ;
 			} ;
 		} ;
-
+#endif
 	if (psf->file.mode == SFM_READ)
 	{	if ((error = mpeg_decoder_init (psf)))
 			return error ;

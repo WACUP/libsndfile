@@ -761,7 +761,12 @@ void	double64_le_write	(double in, unsigned char *out) ;
 
 /* Functions for writing to the internal logging buffer. */
 
+#ifndef VERBOSE_DEBUG
+#define psf_log_printf (void)
+#else
 void	psf_log_printf		(SF_PRIVATE *psf, const char *format, ...) ;
+#endif
+
 void	psf_log_SF_INFO 	(SF_PRIVATE *psf) ;
 
 int32_t	psf_rand_int32 (void) ;

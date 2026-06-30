@@ -35,7 +35,9 @@
 #if __GNUC__
 #define ALWAYS_INLINE		__attribute__ ((always_inline))
 #elif defined _MSC_VER
+#ifndef ALWAYS_INLINE
 #define ALWAYS_INLINE		__forceinline
+#endif
 #else
 #define ALWAYS_INLINE
 #endif

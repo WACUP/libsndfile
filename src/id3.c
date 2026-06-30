@@ -28,8 +28,9 @@
 #include	"common.h"
 #include	"id3.h"
 
-#if HAVE_MPEG
-#include	<lame/lame.h>
+#if HAVE_MPEG == 2
+//#include	<lame/lame.h>
+#include <lame/lame-3.99.5/include/lame.h>
 
 struct id3v1_genre_handler_userdata
 {	int number ;

@@ -162,8 +162,8 @@
 #if HAVE_EXTERNAL_XIPH_LIBS
 
 #include <ogg/ogg.h>
-#include <opus/opus.h>
-#include <opus/opus_multistream.h>
+#include /*<opus/*/<opus.h>
+#include /*<opus/*/<opus_multistream.h>
 
 #include "ogg.h"
 #include "ogg_vcomment.h"
@@ -354,6 +354,7 @@ ogg_opus_open (SF_PRIVATE *psf)
 		psf->read_double	= ogg_opus_read_d ;
 		} ;
 
+#if 0 // dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	if ((error = ogg_opus_setup_encoder (psf, odata, oopus)))
 			return error ;
@@ -369,7 +370,7 @@ ogg_opus_open (SF_PRIVATE *psf)
 		psf->datalength = 0 ;
 		psf->dataoffset = 0 ; /* will be updated */
 		} ;
-
+#endif
 	psf->seek = ogg_opus_seek ;
 	psf->command = ogg_opus_command ;
 	psf->byterate = ogg_opus_byterate ;
@@ -389,7 +390,7 @@ ogg_opus_close (SF_PRIVATE *psf)
 
 	if (!oopus)
 		return 0 ;
-
+#if 0 // dro change
 	if (psf->file.mode == SFM_WRITE)
 	{	if (psf->have_written)
 			ogg_opus_flush (psf) ;
@@ -403,7 +404,9 @@ ogg_opus_close (SF_PRIVATE *psf)
 			oopus->u.encode.state = NULL ;
 			} ;
 		}
-	else if (psf->file.mode == SFM_READ)
+	else
+#endif
+		if (psf->file.mode == SFM_READ)
 	{	if (oopus->u.decode.state)
 		{	opus_multistream_decoder_destroy (oopus->u.decode.state) ;
 			oopus->u.decode.state = NULL ;
@@ -594,8 +597,8 @@ ogg_opus_setup_decoder (SF_PRIVATE *psf, int input_samplerate)
 		&error) ;
 
 	if (error != OPUS_OK)
-	{	psf_log_printf (psf, "Opus : Failed to create multistream decoder: %s\n",
-			opus_strerror (error)) ;
+	{	/*psf_log_printf (psf, "Opus : Failed to create multistream decoder: %s\n",
+			opus_strerror (error)) ;*/
 		return SFE_INTERNAL ;
 		}
 
@@ -707,7 +710,7 @@ ogg_opus_setup_encoder (SF_PRIVATE *psf, OGG_PRIVATE *odata, OPUS_PRIVATE *oopus
 		}
 
 	if (error != OPUS_OK)
-	{	psf_log_printf (psf, "Opus : Error, opus_multistream_encoder_create returned %s\n", opus_strerror (error)) ;
+	{	/*psf_log_printf (psf, "Opus : Error, opus_multistream_encoder_create returned %s\n", opus_strerror (error)) ;*/
 		return SFE_BAD_OPEN_FORMAT ;
 		} ;
 	oopus->header.nb_streams = nb_streams ;
@@ -720,7 +723,7 @@ ogg_opus_setup_encoder (SF_PRIVATE *psf, OGG_PRIVATE *odata, OPUS_PRIVATE *oopus
 	error = opus_multistream_encoder_ctl (oopus->u.encode.state, OPUS_SET_COMPLEXITY (10)) ;
 	if (error != OPUS_OK)
 	{	/* Non-fatal */
-		psf_log_printf (psf, "Opus : OPUS_SET_COMPLEXITY returned: %s\n", opus_strerror (error)) ;
+		/*psf_log_printf (psf, "Opus : OPUS_SET_COMPLEXITY returned: %s\n", opus_strerror (error)) ;*/
 		}
 
 	/*
@@ -731,7 +734,7 @@ ogg_opus_setup_encoder (SF_PRIVATE *psf, OGG_PRIVATE *odata, OPUS_PRIVATE *oopus
 	*/
 	error = opus_multistream_encoder_ctl (oopus->u.encode.state, OPUS_GET_LOOKAHEAD (&lookahead)) ;
 	if (error != OPUS_OK)
-	{	psf_log_printf (psf, "Opus : OPUS_GET_LOOKAHEAD returned: %s\n", opus_strerror (error)) ;
+	{	/*psf_log_printf (psf, "Opus : OPUS_GET_LOOKAHEAD returned: %s\n", opus_strerror (error)) ;*/
 		return SFE_BAD_OPEN_FORMAT ;
 		} ;
 	oopus->header.preskip = lookahead * oopus->sr_factor ;
@@ -914,7 +917,7 @@ ogg_opus_flush (SF_PRIVATE *psf)
 					len, odata->opacket.packet, oopus->buffersize) ;
 
 		if (nbytes < 0)
-		{	psf_log_printf (psf, "Opus : opus_multistream_encode_float returned: %s\n", opus_strerror (nbytes)) ;
+		{	/*psf_log_printf (psf, "Opus : opus_multistream_encode_float returned: %s\n", opus_strerror (nbytes)) ;*/
 			break ;
 			}
 
@@ -1030,8 +1033,8 @@ ogg_opus_read_refill (SF_PRIVATE *psf, OGG_PRIVATE *odata, OPUS_PRIVATE *oopus)
 	odata->pkt_indx ++ ;
 
 	if (nsamp < 0)
-	{	psf_log_printf (psf, "Opus : opus_multistream_decode returned: %s\n",
-			opus_strerror (nsamp)) ;
+	{	/*psf_log_printf (psf, "Opus : opus_multistream_decode returned: %s\n",
+			opus_strerror (nsamp)) ;*/
 		psf->error = SFE_INTERNAL ;
 		return nsamp ;
 		} ;
@@ -1108,7 +1111,7 @@ ogg_opus_write_out (SF_PRIVATE *psf, OGG_PRIVATE *odata, OPUS_PRIVATE *oopus)
 		odata->opacket.packet, oopus->buffersize) ;
 
 	if (nbytes < 0)
-	{	psf_log_printf (psf, "Opus : Error, opus_multistream_encode_float returned: %s\n", opus_strerror (nbytes)) ;
+	{	/*psf_log_printf (psf, "Opus : Error, opus_multistream_encode_float returned: %s\n", opus_strerror (nbytes)) ;*/
 		psf->error = SFE_INTERNAL ;
 		return nbytes ;
 		} ;

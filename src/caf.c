@@ -802,11 +802,11 @@ caf_read_chanmap (SF_PRIVATE * psf, sf_count_t chunk_size)
 	bytesread = psf_binheader_readf (psf, "E444", &layout_tag, &channel_bitmap, &channel_decriptions) ;
 
 	map_info = aiff_caf_of_channel_layout_tag (layout_tag) ;
-
+#if VERBOSE_DEBUG
 	psf_log_printf (psf, "  Tag    : %x\n", layout_tag) ;
 	if (map_info)
 		psf_log_printf (psf, "  Layout : %s\n", map_info->name) ;
-
+#endif
 	if (bytesread < chunk_size)
 		psf_binheader_readf (psf, "j", chunk_size - bytesread) ;
 

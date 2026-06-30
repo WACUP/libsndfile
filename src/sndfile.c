@@ -26,6 +26,7 @@
 #include	"sndfile.h"
 #include	"sfendian.h"
 #include	"common.h"
+#include	"wavlike.h"
 
 #if HAVE_UNISTD_H
 #include <unistd.h>
@@ -34,7 +35,9 @@
 #endif
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 
@@ -308,16 +311,19 @@ static int	validate_sfinfo (SF_INFO *sfinfo) ;
 static int	validate_psf (SF_PRIVATE *psf) ;
 static void	save_header_info (SF_PRIVATE *psf) ;
 static int	psf_close (SF_PRIVATE *psf) ;
-
+#ifndef _WIN32
 static int	try_resource_fork (SF_PRIVATE * psf) ;
+#endif
 
 /*------------------------------------------------------------------------------
 ** Private (static) variables.
 */
 
 int	sf_errno = 0 ;
+#ifdef VERBOSE_DEBUG
 static char	sf_parselog [SF_BUFFER_LEN] = { 0 } ;
 static char	sf_syserr [SF_SYSERR_LEN] = { 0 } ;
+#endif
 
 /*------------------------------------------------------------------------------
 */
@@ -443,7 +449,7 @@ sf_open_fd	(int fd, int mode, SF_INFO *sfinfo, int close_desc)
 	if ((SF_CONTAINER (sfinfo->format)) == SF_FORMAT_SD2)
 	{	sf_errno = SFE_SD2_FD_DISALLOWED ;
 		if (close_desc)
-			close (fd) ;
+			_close (fd) ;
 
 		return	NULL ;
 		} ;
@@ -451,7 +457,7 @@ sf_open_fd	(int fd, int mode, SF_INFO *sfinfo, int close_desc)
 	if ((psf = psf_allocate ()) == NULL)
 	{	sf_errno = SFE_MALLOC_FAILED ;
 		if (close_desc)
-			close (fd) ;
+			_close (fd) ;
 
 		return	NULL ;
 		} ;
@@ -475,25 +481,33 @@ sf_open_virtual	(SF_VIRTUAL_IO *sfvirtual, int mode, SF_INFO *sfinfo, void *user
 	/* Make sure we have a valid set of virtual pointers. */
 	if (sfvirtual->get_filelen == NULL)
 	{	sf_errno = SFE_BAD_VIRTUAL_IO ;
+#ifdef VERBOSE_DEBUG
 		snprintf (sf_parselog, sizeof (sf_parselog), "Bad vio_get_filelen in SF_VIRTUAL_IO struct.\n") ;
+#endif
 		return NULL ;
 		} ;
 
 	if ((sfvirtual->seek == NULL || sfvirtual->tell == NULL) && sfinfo->seekable)
 	{	sf_errno = SFE_BAD_VIRTUAL_IO ;
+#ifdef VERBOSE_DEBUG
 		snprintf (sf_parselog, sizeof (sf_parselog), "Bad vio_seek / vio_tell in SF_VIRTUAL_IO struct.\n") ;
+#endif
 		return NULL ;
 		} ;
 
 	if ((mode == SFM_READ || mode == SFM_RDWR) && sfvirtual->read == NULL)
 	{	sf_errno = SFE_BAD_VIRTUAL_IO ;
+#ifdef VERBOSE_DEBUG
 		snprintf (sf_parselog, sizeof (sf_parselog), "Bad vio_read in SF_VIRTUAL_IO struct.\n") ;
+#endif
 		return NULL ;
 		} ;
 
 	if ((mode == SFM_WRITE || mode == SFM_RDWR) && sfvirtual->write == NULL)
 	{	sf_errno = SFE_BAD_VIRTUAL_IO ;
+#ifdef VERBOSE_DEBUG
 		snprintf (sf_parselog, sizeof (sf_parselog), "Bad vio_write in SF_VIRTUAL_IO struct.\n") ;
+#endif
 		return NULL ;
 		} ;
 
@@ -563,13 +577,14 @@ const char*
 sf_strerror (SNDFILE *sndfile)
 {	SF_PRIVATE 	*psf = NULL ;
 	int errnum ;
-
+#ifdef VERBOSE_DEBUG
 	if (sndfile == NULL)
 	{	errnum = sf_errno ;
 		if (errnum == SFE_SYSTEM && sf_syserr [0])
 			return sf_syserr ;
 		}
 	else
+#endif
 	{	psf = (SF_PRIVATE *) sndfile ;
 
 		if (psf->Magick != SNDFILE_MAGICK)
@@ -618,7 +633,7 @@ sf_perror (SNDFILE *sndfile)
 		errnum = psf->error ;
 		} ;
 
-	fprintf (stderr, "%s\n", sf_error_number (errnum)) ;
+	//fprintf (stderr, "%s\n", sf_error_number (errnum)) ;
 	return SFE_NO_ERROR ;
 } /* sf_perror */
 
@@ -906,7 +921,7 @@ sf_format_check	(const SF_INFO *info)
 					return 0 ;
 				if (endian != SF_ENDIAN_FILE)
 					return 0 ;
-				if (subformat == SF_FORMAT_PCM_S8 || subformat == SF_FORMAT_PCM_16 || subformat == SF_FORMAT_PCM_24)
+				if (subformat == SF_FORMAT_PCM_S8 || subformat == SF_FORMAT_PCM_16 || subformat == SF_FORMAT_PCM_24 || subformat == SF_FORMAT_PCM_32)
 					return 1 ;
 				break ;
 
@@ -1047,14 +1062,14 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 				return (sf_errno = SFE_BAD_COMMAND_PARAM) ;
 			return psf_get_format_info (data) ;
 		} ;
-
+#ifdef VERBOSE_DEBUG
 	if (sndfile == NULL && command == SFC_GET_LOG_INFO)
 	{	if (data == NULL)
 			return (sf_errno = SFE_BAD_COMMAND_PARAM) ;
 		snprintf (data, datasize, "%s", sf_parselog) ;
 		return strlen (data) ;
 		} ;
-
+#endif
 	VALIDATE_SNDFILE_AND_ASSIGN_PSF (sndfile, psf, 1) ;
 
 	switch (command)
@@ -1085,8 +1100,17 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 
 			psf->float_int_mult = (datasize != 0) ? SF_TRUE : SF_FALSE ;
 			if (psf->float_int_mult && psf->float_max < 0.0)
-				/* Scale to prevent wrap-around distortion. */
-				psf->float_max = (32768.0 / 32767.0) * psf_calc_signal_max (psf, SF_FALSE) ;
+			{	if (NULL == data)
+				{	/* Scale to prevent wrap-around distortion. */
+					psf->float_max = (32768.0 / 32767.0) * psf_calc_signal_max (psf, SF_FALSE) ;
+					}
+				else
+				{	if (isfinite(*(float *)data) && *(float *)data > 0.0)
+						psf->float_max = *(float *)data;
+					else
+						return (sf_errno = SFE_BAD_COMMAND_PARAM) ;
+					}
+				}
 			return old_value ;
 
 		case SFC_SET_SCALE_INT_FLOAT_WRITE :
@@ -1291,6 +1315,18 @@ sf_command	(SNDFILE *sndfile, int command, void *data, int datasize)
 			if (psf->loop_info == NULL)
 				return SF_FALSE ;
 			memcpy (data, psf->loop_info, sizeof (SF_LOOP_INFO)) ;
+			return SF_TRUE ;
+
+		case SFC_SET_LOOP_INFO :
+			if (datasize != sizeof (SF_LOOP_INFO) || data == NULL)
+			{	psf->error = SFE_BAD_COMMAND_PARAM ;
+				return SF_FALSE ;
+				} ;
+			if (psf->loop_info == NULL)
+				return SF_FALSE ;
+
+			if (psf->write_header)
+				psf->write_header (psf, SF_TRUE) ;
 			return SF_TRUE ;
 
 		case SFC_SET_BROADCAST_INFO :
@@ -2683,7 +2719,7 @@ sf_writef_double	(SNDFILE *sndfile, const double *ptr, sf_count_t frames)
 /*=========================================================================
 ** Private functions.
 */
-
+#ifndef _WIN32
 static int
 try_resource_fork (SF_PRIVATE * psf)
 {	int old_error = psf->error ;
@@ -2700,6 +2736,7 @@ try_resource_fork (SF_PRIVATE * psf)
 
 	return SF_FORMAT_SD2 ;
 } /* try_resource_fork */
+#endif
 
 static int
 format_from_extension (SF_PRIVATE *psf)
@@ -2790,7 +2827,27 @@ retry:
 
 	if ((buffer [0] == MAKE_MARKER ('R', 'I', 'F', 'F') || buffer [0] == MAKE_MARKER ('R', 'I', 'F', 'X'))
 			&& buffer [2] == MAKE_MARKER ('W', 'A', 'V', 'E'))
+	{
+		// dro - change this will see if it might be mp3
+		// within the data block which can occur. so we
+		// need to do the extra checks so as to be able
+		// to report SF_FORMAT_MP3 instead of as a WAV
+
+		uint32_t buf[3];
+		if (psf_binheader_readf (psf, "b", buf, SIGNED_SIZEOF (buf)) == SIGNED_SIZEOF (buf))
+		{
+			if (buf[0] == MAKE_MARKER('f', 'm', 't', ' '))
+			{
+				MIN_WAV_FMT *src_fmt = (MIN_WAV_FMT *)&buf[2];
+				if (src_fmt->format == WAVE_FORMAT_MPEG ||
+					src_fmt->format == WAVE_FORMAT_MPEGLAYER3) {
+					return SF_FORMAT_MPEG;
+				}
+			}
+		}
+
 		return SF_FORMAT_WAV ;
+	};
 
 	if (buffer [0] == MAKE_MARKER ('F', 'O', 'R', 'M'))
 	{	if (buffer [2] == MAKE_MARKER ('A', 'I', 'F', 'F') || buffer [2] == MAKE_MARKER ('A', 'I', 'F', 'C'))
@@ -2903,9 +2960,10 @@ retry:
 		return 0 /*-SF_FORMAT_SHN-*/ ;
 
 	/* This must be (almost) the last one. */
+#ifndef _WIN32	// dro change as this really isn't needed imho for win32
 	if (psf->filelength > 0 && (format = try_resource_fork (psf)) != 0)
 		return format ;
-
+#endif
 	/* MPEG with no ID3v2 tags. Only have the MPEG sync header for
 	 * identification and it is quite brief, and prone to false positives.
 	 * Check for this last, even after resource forks. */
@@ -2954,7 +3012,10 @@ validate_psf (SF_PRIVATE *psf)
 
 static void
 save_header_info (SF_PRIVATE *psf)
-{	snprintf (sf_parselog, sizeof (sf_parselog), "%s", psf->parselog.buf) ;
+{
+#ifdef VERBOSE_DEBUG
+	snprintf (sf_parselog, sizeof (sf_parselog), "%s", psf->parselog.buf) ;
+#endif
 } /* save_header_info */
 
 /*==============================================================================
@@ -3010,7 +3071,9 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 {	int		error, format ;
 
 	sf_errno = error = 0 ;
+#ifdef VERBOSE_DEBUG
 	sf_parselog [0] = 0 ;
+#endif
 
 	if (psf->error)
 	{	error = psf->error ;
@@ -3034,8 +3097,16 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 				goto error_exit ;
 				} ;
 			}
-		else
-			memset (sfinfo, 0, sizeof (SF_INFO)) ;
+			else
+			{
+				// dro change to try to force the mp3 handling into
+				// a specific mode where the exact length is looked
+				// for when the caller determines the length from a
+				// standard load doesn't match the metadata length.
+				const BOOL length_hack = (sfinfo->frames == -13337);
+				memset (sfinfo, 0, sizeof (SF_INFO)) ;
+				if (length_hack) sfinfo->frames = -13337;
+			}
 		} ;
 
 	memcpy (&psf->sf, sfinfo, sizeof (SF_INFO)) ;
@@ -3050,7 +3121,8 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 	psf->auto_header 	= SF_FALSE ;
 	psf->rwf_endian		= SF_ENDIAN_LITTLE ;
 	psf->seek			= psf_default_seek ;
-	psf->float_int_mult = 0 ;
+	psf->float_int_mult = 1 ;	// dro change so things will not be messed
+								// up when using the floating point output
 	psf->float_max		= -1.0 ;
 
 	/* An attempt at a per SF_PRIVATE unique id. */
@@ -3346,11 +3418,11 @@ psf_open_file (SF_PRIVATE *psf, SF_INFO *sfinfo)
 
 error_exit :
 	sf_errno = error ;
-
+#ifdef VERBOSE_DEBUG
 	if (error == SFE_SYSTEM)
 		snprintf (sf_syserr, sizeof (sf_syserr), "%s", psf->syserr) ;
 	snprintf (sf_parselog, sizeof (sf_parselog), "%s", psf->parselog.buf) ;
-
+#endif
 	switch (error)
 	{	case SF_ERR_SYSTEM :
 		case SF_ERR_UNSUPPORTED_ENCODING :
@@ -3362,7 +3434,7 @@ error_exit :
 
 		default :
 			if (psf->file.mode == SFM_READ)
-			{	psf_log_printf (psf, "Parse error : %s\n", sf_error_number (error)) ;
+			{	//psf_log_printf (psf, "Parse error : %s\n", sf_error_number (error)) ;
 				error = SF_ERR_MALFORMED_FILE ;
 				} ;
 		} ;

@@ -32,6 +32,9 @@
 
 #include <mpg123.h>
 
+// dro change to get the read mode
+#include <loader/loader/ini.h>
+
 typedef struct
 {	mpg123_handle *pmh ;
 	size_t header_remaining ;
@@ -72,7 +75,7 @@ mpeg_dec_close (SF_PRIVATE *psf)
 
 	if (pmp3d)
 	{	if (pmp3d->pmh)
-		{	mpg123_close (pmp3d->pmh) ;
+		{	//mpg123_close (pmp3d->pmh) ;
 			mpg123_delete (pmp3d->pmh) ;
 			pmp3d->pmh = NULL ;
 			}
@@ -217,8 +220,13 @@ mpeg_dec_fill_sfinfo (SF_PRIVATE* psf, mpg123_handle *mh, SF_INFO *info)
 	info->samplerate = rate ;
 	info->channels = channels ;
 
-	length = mpg123_length (mh) ;
-	if (length <= 0 && !psf->is_pipe)
+	// dro change so we're more likely to get a valid
+	// length even if it might cause slow processing!
+	// with a config option added for those who don't
+	// need it or are ok with things being less exact
+	length = ((GetWinampIniBool(L"exact", 0) || (info->frames ==
+						   -13337)) ? -1 : mpg123_length (mh)) ;
+	if (length <= 0 && !psf->is_pipe)/**/
 	{	if ((error = mpg123_scan (mh)) != MPG123_OK)
 			return error ;
 		length = mpg123_length (mh) ;
@@ -292,7 +300,7 @@ mpeg_dec_print_frameinfo (SF_PRIVATE *psf, const struct mpg123_frameinfo *fi)
  */
 static int
 strcpy_inbounded (char *dest, size_t size, const char *src)
-{	char *c = memccpy (dest, src, '\0', size) ;
+{	char *c = _memccpy (dest, src, '\0', size) ;
 	if (!c)
 		c = dest + size ;
 	*c = '\0' ;
@@ -499,8 +507,8 @@ mpeg_dec_byterate (SF_PRIVATE *psf)
 int
 mpeg_decoder_init (SF_PRIVATE *psf)
 {	MPEG_DEC_PRIVATE *pmp3d ;
-	struct mpg123_frameinfo fi ;
-	int error ;
+	struct mpg123_frameinfo fi = { 0 } ;
+	int error = MPG123_OK;
 
 	if (! (psf->file.mode & SFM_READ))
 		return SFE_INTERNAL ;
@@ -527,8 +535,8 @@ mpeg_decoder_init (SF_PRIVATE *psf)
 	** mpg123 upstream has confirmed that mpg132_init() will become a NOP in future,
 	** so this is moot.
 	*/
-	if (mpg123_init () != MPG123_OK)
-		return SFE_INTERNAL ;
+	/*if (mpg123_init () != MPG123_OK)
+		return SFE_INTERNAL ;*/
 
 	psf->codec_data = pmp3d = calloc (1, sizeof (MPEG_DEC_PRIVATE)) ;
 	if (!psf->codec_data)
@@ -536,7 +544,7 @@ mpeg_decoder_init (SF_PRIVATE *psf)
 
 	pmp3d->pmh = mpg123_new (NULL, &error) ;
 	if (!pmp3d->pmh)
-	{ psf_log_printf (psf, "Could not obtain a mpg123 handle: %s\n", mpg123_plain_strerror (error)) ;
+	{	//psf_log_printf (psf, "Could not obtain a mpg123 handle: %s\n", mpg123_plain_strerror (error)) ;
 		return SFE_INTERNAL ;
 		} ;
 
@@ -547,9 +555,10 @@ mpeg_decoder_init (SF_PRIVATE *psf)
 
 	mpg123_param (pmp3d->pmh, MPG123_REMOVE_FLAGS, MPG123_AUTO_RESAMPLE, 1.0) ;
 	mpg123_param (pmp3d->pmh, MPG123_ADD_FLAGS, MPG123_FORCE_FLOAT | MPG123_GAPLESS, 1.0) ;
-#if MPG123_API_VERSION >= 45
-	mpg123_param (pmp3d->pmh, MPG123_ADD_FLAGS, MPG123_NO_FRANKENSTEIN, 1.0) ;
-#endif
+	// dro change since this isn't defined but we know we're on a compatible version
+	/*#if MPG123_API_VERSION >= 45
+		mpg123_param (pmp3d->pmh, MPG123_ADD_FLAGS, MPG123_NO_FRANKENSTEIN, 1.0) ;
+	#endif*/
 
 	/*
 	** Need to pass the first MPEG frame to libmpg123, but that frame was read
@@ -579,18 +588,18 @@ mpeg_decoder_init (SF_PRIVATE *psf)
 
 	error = mpg123_open_handle (pmp3d->pmh, psf) ;
 	if (error != MPG123_OK)
-	{	psf_log_printf (psf, "mpg123 could not open the file: %s\n", mpg123_plain_strerror (error)) ;
+	{	//psf_log_printf (psf, "mpg123 could not open the file: %s\n", mpg123_plain_strerror (error)) ;
 		return SFE_BAD_FILE ;
 		} ;
 
 	if (mpeg_dec_fill_sfinfo (psf, pmp3d->pmh, &psf->sf) != MPG123_OK)
-	{	psf_log_printf (psf, "Cannot get MPEG decoder configuration: %s\n", mpg123_plain_strerror (error)) ;
+	{	//psf_log_printf (psf, "Cannot get MPEG decoder configuration: %s\n", mpg123_plain_strerror (error)) ;
 		return SFE_BAD_FILE ;
 		} ;
 
 	error = mpg123_info (pmp3d->pmh, &fi) ;
 	if (error != MPG123_OK)
-	{	psf_log_printf (psf, "Cannot get MPEG frame info: %s\n", mpg123_plain_strerror (error)) ;
+	{	//psf_log_printf (psf, "Cannot get MPEG frame info: %s\n", mpg123_plain_strerror (error)) ;
 		return SFE_INTERNAL ;
 		}
 
