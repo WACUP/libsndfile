@@ -35,6 +35,8 @@
 #include	<FLAC/stream_encoder.h>
 #include	<FLAC/metadata.h>
 
+#include	<delayimp.h>
+
 /*------------------------------------------------------------------------------
 ** Private static functions.
 */
@@ -740,6 +742,15 @@ flac_open	(SF_PRIVATE *psf)
 
 	if (psf->file.mode == SFM_RDWR)
 		return SFE_BAD_MODE_RW ;
+
+	// dro change - give things a nudge as it is
+	// possible to get crashes due to this being
+	// called on multiple threads so we avoid it
+	static int checked_flac;
+	if (!checked_flac)
+	{
+		checked_flac = SUCCEEDED(__HrLoadAllImportsForDll("libflac.dll"));
+	}
 
 	if (psf->file.mode == SFM_READ)
 	{	if ((error = flac_read_header (psf)))

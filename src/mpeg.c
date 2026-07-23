@@ -26,6 +26,8 @@
 
 #include "mpeg.h"
 
+#include <delayimp.h>
+
 static int	mpeg_write_header (SF_PRIVATE *psf, int calc_length) ;
 static int	mpeg_command (SF_PRIVATE *psf, int command, void *data, int datasize) ;
 
@@ -131,6 +133,15 @@ mpeg_init (SF_PRIVATE *psf, int bitrate_mode, int write_metadata)
 int
 mpeg_open (SF_PRIVATE *psf)
 {	int error ;
+
+	// dro change - give things a nudge as it is
+	// possible to get crashes due to this being
+	// called on multiple threads so we avoid it
+	static int checked_mpg123;
+	if (!checked_mpg123)
+	{
+		checked_mpg123 = SUCCEEDED(__HrLoadAllImportsForDll("mpg123.dll"));
+	}
 
 	/* Choose variable bitrate mode by default for standalone files.*/
 	if ((error = mpeg_init (psf, SF_BITRATE_MODE_VARIABLE, SF_TRUE)))
